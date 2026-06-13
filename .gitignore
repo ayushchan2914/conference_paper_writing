@@ -1,0 +1,16 @@
+# Ignore everything except the write paper folder
+/*
+!/.gitignore
+!/write paper/
+!/write paper/**
+!/write paper/**/*
+
+# LaTeX build artifacts
+*.log
+*.aux
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
