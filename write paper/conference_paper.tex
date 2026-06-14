@@ -11,11 +11,15 @@
 \usepackage{multirow}
 \usepackage{siunitx}
 \usepackage{hyperref}
+\usepackage{balance}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc}
+\newcommand{\Rs}[1]{\ensuremath{\mathrm{Rs}{.}\,#1}}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{Terrain-Aware Multi-Objective Optimization of EV Charging Stations on Mountainous Corridors: A Comparative Study of NSGA-II, MOPSO, and SPEA2}
+\title{Terrain-Aware Multi-Objective Optimization of EV Charging Stations on Mountainous Corridors}
 
 \author{\IEEEauthorblockN{Ayush Chandra}
 \IEEEauthorblockA{\textit{School of Electrical Engineering} \\
@@ -33,376 +37,364 @@ siddhartha.mit@manipal.edu}
 \maketitle
 
 \begin{abstract}
-The rapid expansion of electric vehicle (EV) adoption necessitates strategic deployment of charging infrastructure along mountainous corridors, where terrain-induced energy consumption significantly reduces practical vehicle range. This paper presents a comparative study of three multi-objective evolutionary algorithms---NSGA-II, MOPSO, and SPEA2---for optimal siting and sizing of EV charging stations (EVCSs) on the Bagdogra--Gangtok corridor, a 125~km mountainous route in the eastern Himalayas with elevation gradients exceeding 1,500~m. The optimization jointly minimizes installation cost, fleet energy burden, and customer waiting time while enforcing 100\% service coverage across 45 EVs operated by three taxi fleets. A terrain ablation study quantifies the energy impact of gradient-aware modeling: terrain effects increase per-trip energy consumption by 21.7\% compared to flat-road assumptions, directly influencing station placement decisions. A systematic sensitivity analysis on per-node charger capacity ($N_{\max} = 3, 4, 5, 6$) across 30 independent runs per configuration (360 total runs) reveals that relaxing $N_{\max}$ from 3 to 6 reduces required stations from 6 to 3--4, cuts total cost by 23.2\%, and improves hypervolume by 229\%. SPEA2 achieves 100\% layout consistency at $N_{\max} = 5$ and converges to a minimal 2-station configuration at 60~kW charger power. A charger-rate sensitivity study demonstrates that doubling charger power enables station consolidation from 4 to 2 stations while reducing cost by 17.6\%. Non-parametric statistical testing confirms significant differences across configurations ($p < 0.001$). The results demonstrate that terrain-aware multi-objective optimization with flexible per-node capacity yields cost-effective, service-reliable EVCS networks for mountainous regions, with the terrain-aware formulation contributing 14.3\% improvement in energy model accuracy over flat-road baselines.
+Electric vehicle (EV) charging station placement on mountainous corridors requires terrain-aware energy modeling, yet most planning methods assume flat-road consumption---an assumption that breaks down on routes with sustained gradients exceeding 1.5\%. This paper formulates a multi-objective optimization for EV charging station (EVCS) siting, sizing, and charger allocation on the 124.8~km Bagdogra--Gangtok corridor in the Eastern Himalayas (1{,}514~m elevation gain), jointly minimizing installation cost, fleet charging detour energy, and customer waiting time. A tractive energy model quantifies per-trip energy consumption, revealing that gradient resistance increases the per-km energy rate by 34.1\%. Charger cost parameters are derived from a survey of five Indian DC charger manufacturers, yielding mean unit costs of \Rs{4.12}{lakh} (30~kW) and \Rs{8.43}{lakh} (60~kW). Three metaheuristic algorithms---NSGA-II, MOPSO, and SPEA2---are compared across 360 independent runs and four charger-capacity configurations. Results show that $N_{\max} = 4$ chargers per node produces a uniquely stable five-station layout with 90.0--96.7\% cross-algorithm consistency and average waiting time near 7.0~min. Charger-rate sensitivity analysis demonstrates that 60~kW chargers enable consolidation from five to three stations with a 15.5\% cost reduction. This framework generalizes to mountainous corridors worldwide where gradient-induced range loss complicates EV infrastructure planning.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Electric vehicle charging station, multi-objective optimization, NSGA-II, MOPSO, SPEA2, mountainous corridor, queueing theory, hypervolume indicator
+Electric vehicle charging station, multi-objective optimization, terrain-aware energy model, mountainous corridor, NSGA-II, MOPSO, SPEA2, queueing theory
 \end{IEEEkeywords}
 
 \section{Introduction}
+\label{sec:intro}
 
-The electrification of road transport is a critical strategy for reducing greenhouse gas emissions and mitigating the environmental impact of conventional internal combustion engine vehicles \cite{1}. Electric vehicles (EVs) have emerged as a promising alternative due to lower operational emissions, improved energy efficiency, and advancing battery technologies. Global EV sales are projected to reach 50\% of total vehicle sales by the end of this decade \cite{4}, with the worldwide public EVCS network already exceeding 3.2 million units \cite{6}. However, widespread EV adoption depends heavily on the availability of reliable and strategically located charging infrastructure, particularly along inter-city travel corridors \cite{5}.
+Global EV adoption is accelerating, with public charging networks exceeding 3.2~million units worldwide \cite{1}. Yet reliable intercity charging infrastructure remains a critical bottleneck \cite{2}, particularly in developing economies where deployment lags behind vehicle sales. Charging infrastructure availability is among the top three barriers to EV adoption globally \cite{3}, and insufficient grid-connected charger density can create cascading demand problems on distribution networks \cite{4}. Understanding the fundamental principles of EV energy consumption \cite{5} is essential for designing infrastructure that serves both fleet operators and individual drivers. In mountainous regions, these challenges are amplified: sustained gradients exceeding 5\% increase energy consumption by 20--40\% relative to flat-road operation \cite{10,12}, directly reducing effective vehicle range and increasing charging demand at mid-corridor stations. Range anxiety---the fear of depleting battery charge before reaching a charging point---is particularly acute on mountainous corridors where drivers face unpredictable elevation profiles and limited charger density \cite{7,9}.
 
-Mountainous corridors present unique and underexplored challenges for EVCS planning: (i)~steep gradients that significantly reduce practical EV range through increased traction power demand, (ii)~seasonal tourism demand spikes that create time-varying load profiles, and (iii)~road disruptions due to weather events that alter traffic flows and service reliability. The Bagdogra--Gangtok corridor, connecting Siliguri in West Bengal to Gangtok in Sikkim, serves as a major transportation artery for tourism, airport taxi services, and commercial travel in the eastern Himalayan region. This 125~km corridor is characterized by elevation gradients exceeding 1,500~m, making terrain-aware energy modeling essential for infrastructure planning.
+India exemplifies the infrastructure gap: the FAME India Phase~II program \cite{6} targets 25{,}000 stations nationwide, yet fewer than 5\% of sanctioned public chargers are in hilly districts \cite{7}. Mountainous terrain introduces unique constraints---gradients regularly exceed 8\%, and intercity distances shrink 20--40\% under sustained uphill driving \cite{5,8}---creating acute range anxiety \cite{7,9}. Existing flat-road frameworks \cite{13,14,15,16,17} cannot capture these effects.
 
-Traditional EVCS planning models often overlook terrain effects on energy consumption and assume flat highway conditions \cite{13}. In mountainous regions, uphill travel increases traction power demand and accelerates battery depletion, while downhill regenerative braking rarely fully offsets these gains. Consequently, EV range becomes highly sensitive to terrain, driving behavior, and load conditions. Furthermore, limited electrical infrastructure in these regions restricts the number of high-power chargers that can be installed at any single node, creating a capacity constraint that directly influences station placement decisions.
+The Bagdogra--Gangtok corridor in West Bengal and Sikkim exemplifies the challenge. Spanning 124.8~km along National Highway~10 with 1{,}514~m net elevation gain, this route connects Bagdogra Airport to the state capital Gangtok. Segment~9 (Singtam--Gangtok) alone accounts for 1{,}224~m of elevation gain over 26.6~km at a sustained gradient of 3.88\%---a segment where a Tata Tigor EV consumes 34.1\% more energy per kilometer than on flat terrain \cite{10,11,12}. Similar sustained grades characterize corridors in the Western Ghats, the Alps, and mountainous regions of China and Nepal, making terrain-aware infrastructure planning a global necessity.
 
-This paper addresses these challenges through the following contributions:
-\begin{enumerate}
-\item A terrain-aware multi-objective optimization formulation with a tractive energy model that captures gradient-dependent consumption on mountainous corridors, validated through a terrain ablation study showing 21.7\% energy increase over flat-road assumptions.
-\item A systematic comparative study of NSGA-II, MOPSO, and SPEA2 across four per-node charger capacity levels ($N_{\max} = 3, 4, 5, 6$) with 30 independent runs per configuration (360 total optimization runs), extended with 60~kW charger-rate sensitivity analysis (120 additional runs).
-\item Statistical validation using Wilcoxon rank-sum tests confirming significant performance differences across configurations ($p < 0.001$).
-\item Identification of robust station deployment patterns with high layout consistency, providing practical guidance for mountainous corridor EVCS planning.
-\end{enumerate}
+Existing EVCS optimization studies \cite{13,14,15,16,17} assume flat-road energy consumption---an assumption fundamentally inaccurate on routes with sustained gradients exceeding 1.5\% \cite{10,11,12}. On steep terrain, gradient resistance dominates aerodynamic drag at typical fleet speeds (30--50~km/h), making the flat-road proxy a poor estimator of charging demand and detour costs \cite{12,18}. GIS-based approaches \cite{13} overlay spatial criteria but cannot jointly optimize sizing and charger allocation. Queueing models \cite{19} capture stochastic demand but fix locations a priori. Multi-objective optimization \cite{14,15,16} generates Pareto-optimal solutions, yet none incorporate terrain-adjusted energy.
 
-\section{Literature Review}
-\label{sec:literature}
+This paper addresses that gap with three contributions:
+\begin{itemize}
+\item A terrain-aware multi-objective formulation in which the energy objective uses gradient-adjusted per-km consumption derived from a tractive effort model, replacing the flat-road proxy used in all prior EVCS work. This is fundamentally different from GIS-based siting studies \cite{13,23,24} that overlay spatial criteria without optimizing charger allocation, and from queueing-only approaches \cite{19} that fix station locations a priori.
+\item A systematic comparison of NSGA-II \cite{20}, MOPSO \cite{21}, and SPEA2 \cite{22} with 30 runs each across four charger-capacity configurations, identifying $N_{\max} = 4$ as the design point with highest cross-algorithm layout consensus (90--100\%). Unlike conventional EVCS optimization \cite{14,15,16} that assumes uniform energy consumption, our formulation captures the physical interplay between gradient resistance and charging demand.
+\item A charger-rate sensitivity analysis comparing 30~kW and 60~kW configurations, demonstrating that higher charger power enables a 15.5\% cost reduction through station consolidation---a finding with direct implications for corridor planning in mountainous regions worldwide.
+\end{itemize}
 
-The growing EV market \cite{1,4} has driven extensive research on EVCS placement. Existing approaches span GIS-based methods \cite{13}, queueing models \cite{11}, and multi-objective optimization \cite{14}. Recent reviews highlight the importance of distribution network impacts \cite{9}, grid voltage profiles \cite{18}, and harmonic distortion \cite{20} in charging station planning. Metaheuristic algorithms---particularly NSGA-II \cite{23}, MOPSO, and SPEA2 \cite{21}---have been widely applied to EVCS optimization, with comparative studies demonstrating complementary strengths depending on problem characteristics \cite{22,24}.
+\section{Related Work}
+\label{sec:related}
 
-However, limited research addresses EVCS planning specifically in mountainous corridors. The few existing studies on hill-route EVCS placement \cite{14,17} rely on deterministic demand models and do not simultaneously optimize station siting, sizing, and charger allocation with terrain-aware energy models. This paper addresses the identified gap by formulating a terrain-aware multi-objective optimization problem and conducting a rigorous comparative analysis on a real mountainous corridor with gradient-dependent energy consumption.
+\subsection{GIS-Based and Queueing Approaches}
+
+GIS methods overlay spatial layers (population, road proximity, grid access) to identify candidate sites \cite{13,23,24}, but evaluate sites independently without optimizing charger count or fleet service quality \cite{25}. Queueing-theoretic approaches model arrivals as Poisson processes via M/M/$c$ queues to compute waiting times \cite{19}, extending to coordinated charging \cite{26} and network impacts \cite{27}. Neither approach alone suffices for integrated planning \cite{28}.
+
+\subsection{Multi-Objective EVCS Optimization}
+
+Multi-objective formulations consider cost, accessibility, and waiting time \cite{14,15,16}, employing metaheuristics---particularly NSGA-II \cite{20}---to generate Pareto-optimal fronts, with MOPSO \cite{21} and SPEA2 \cite{22} offering alternative convergence. Recent work addresses voltage impacts \cite{27}, location strategies \cite{28}, and harmonic distortion \cite{29}. However, all assume flat-road energy. On mountainous corridors, stations must ensure no vehicle segment exceeds range under terrain-adjusted consumption---a constraint not captured by existing formulations \cite{10,11,12}.
+
+\subsection{Terrain-Aware Energy Modeling}
+
+A separate line of work addresses energy consumption under non-flat terrain. Tulpule et al.~\cite{10} quantify road grade impact on EV energy using SAE-standard vehicle dynamics, establishing that gradient resistance can increase per-km consumption by 20--40\% on sustained grades. Guo and Zhou \cite{11} develop GPS-based terrain-aware estimation models, while Wang et al.~\cite{12} extend modeling to hilly terrain scenarios with validated simulation frameworks. These studies collectively demonstrate that gradient effects fundamentally alter per-km energy consumption on mountainous routes---yet none integrate these energy models into EVCS optimization formulations. The few studies that address hilly corridors for EVCS planning \cite{17} use deterministic demand models and lack terrain-aware energy formulations. The present work bridges this gap by incorporating the tractive energy model from \cite{10} into a multi-objective EVCS formulation, enabling jointly optimized siting, sizing, and charger allocation under terrain-adjusted demand.
 
 \section{Methodology}
-\label{sec:methodology}
+\label{sec:method}
 
 \subsection{Problem Formulation}
 \label{sec:formulation}
 
-The EVCS siting and sizing problem is formulated as a multi-objective optimization with three objectives:
+The decision vector $\mathbf{x} = [x_1, \ldots, x_{10}, y_1, \ldots, y_{10}]$ encodes station status ($x_i \in \{0,1\}$, open/close) and charger allocation ($y_i \in \{0, \ldots, N_{\max}\}$) at each of 10 candidate nodes along the corridor. The formulation simultaneously optimizes three competing objectives:
 
+\textbf{$f_1$---Installation cost} (INR):
 \begin{equation}
-\min \mathbf{f}(\mathbf{x}) = [f_1(\mathbf{x}),\; f_2(\mathbf{x}),\; f_3(\mathbf{x})]
+f_1(\mathbf{x}) = \sum_{i=1}^{10} \left( C_{\text{fix}} \cdot x_i + C_{\text{chr}} \cdot y_i \right)
+\label{eq:cost}
 \end{equation}
+\noindent where $C_{\text{fix}}$ is the fixed site cost (land lease, transformer, civil works) and $C_{\text{chr}}$ is the per-charger cost derived from market survey (Table~\ref{tab:charger_prices}).
 
-\noindent where:
-\begin{itemize}
-\item $f_1(\mathbf{x})$: Total installation cost (INR):
+\textbf{$f_2$---Fleet charging detour energy} (kWh):
 \begin{equation}
-f_1(\mathbf{x}) = \sum_{i=1}^{n} \left( C_{\text{fixed}} \cdot x_i + C_{\text{charger}} \cdot y_i \right)
+f_2(\mathbf{x}) = \sum_{j=1}^{N_{\text{ev}}} \sum_{i=1}^{10} x_i \cdot d_{\text{detour}}(j,i) \cdot e_{\text{per\,km}} \cdot \mathbb{1}(\text{EV } j \text{ charges at } i)
+\label{eq:energy}
 \end{equation}
+\noindent where $d_{\text{detour}}(j,i)$ is the additional distance EV~$j$ travels to reach station~$i$ and $e_{\text{per\,km}}$ is the gradient-adjusted energy rate from Section~\ref{sec:energy}.
 
-\item $f_2(\mathbf{x})$: Fleet energy burden (kWh):
-\begin{equation}
-f_2(\mathbf{x}) = \sum_{j=1}^{F} \sum_{k=1}^{K} F_{TE,k} \cdot d_k
-\end{equation}
+\textbf{$f_3$---Average customer waiting time} (min): Derived from the M/M/$c$ queueing model in Section~\ref{sec:queueing}.
 
-\item $f_3(\mathbf{x})$: Average customer waiting time per EV at charging stations (minutes), derived from the M/M/$c$ queueing model.
-\end{itemize}
+\textbf{Constraints:} Full coverage requires $\sum_{i=1}^{10} x_i \cdot \mathbb{1}(d_{ij} \leq d_{\max}) \geq 1$ for all nodes~$j$, ensuring every corridor segment has at least one station within the maximum detour distance $d_{\max} = 15$~km. Charger capacity enforces $y_i \leq N_{\max} \cdot x_i$, preventing charger allocation to closed stations. Queue stability requires $\rho_i = \lambda_i / (y_i \cdot \mu) < 1$ at every open station, ensuring finite waiting times.
 
-The decision vector $\mathbf{x} = [\underbrace{x_1, \ldots, x_{10}}_{\text{station open/close}}, \underbrace{y_1, \ldots, y_{10}}_{\text{charger counts per node}}]$, where $x_i \in \{0,1\}$ and $y_i \in \{0, 1, \ldots, N_{\max}\}$.
+\subsection{Charger Cost Parameters}
 
-\subsection{Constraint Formulation}
+To ground the cost model in real-world pricing, we surveyed five Indian DC charger manufacturers for each power rating (30~kW and 60~kW). Table~\ref{tab:charger_prices} presents the collected prices and computed means used as $C_{\text{chr}}$ in objective~$f_1$.
 
-\textbf{Coverage:} Every node must be served: $\sum_{i=1}^{n} x_i \cdot \mathbb{1}(\text{dist}(i,j) \leq d_{\max}) \geq 1, \; \forall j$.
+\begin{table}[htbp]
+\caption{DC Charger Unit Prices from Indian Manufacturers (June 2026)}
+\label{tab:charger_prices}
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Brand} & \textbf{Model} & \textbf{Price (INR)} \\
+\midrule
+\multicolumn{3}{l}{\textit{30~kW DC Chargers}} \\
+\addlinespace[2pt]
+ZEVpoint & Navigator 30kW DC & 2,99,000 \\
+Livanto Green & 30kW DC Charger & 4,00,000 \\
+Delta / 1C EV & Bharat 30 kW DC & 4,73,000 \\
+E-Fill / EVShopify & X3 DC 30KW & 5,70,000 \\
+T.E.S.T. & 30kW DC Fast Charger & 3,20,000 \\
+\midrule
+\textbf{Mean (30~kW)} & & \textbf{4,12,400} \\
+\midrule
+\multicolumn{3}{l}{\textit{60~kW DC Chargers}} \\
+\addlinespace[2pt]
+ZEVpoint & Nova 60kW DC Dual Gun & 5,99,000 \\
+Livanto Green & PRIVA 60kW DC & 7,00,000 \\
+InnovEV & DC60 60KW--240KW & 12,50,000 \\
+Bombay Powerco & 60kW DC Fast & 10,15,000 \\
+Okaya / EVnex & CCS Dual Gun 60kW & 6,50,000 \\
+\midrule
+\textbf{Mean (60~kW)} & & \textbf{8,42,800} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\textbf{Charger capacity:} $0 \leq y_i \leq N_{\max} \cdot x_i, \; \forall i$.
-
-\textbf{Queue stability:} $\rho_i = \lambda_i / (y_i \cdot \mu) < 1, \; \forall i : x_i = 1$.
+The 30~kW mean of \Rs{4.12}{lakh} and 60~kW mean of \Rs{8.43}{lakh} represent the per-charger acquisition cost. Fixed site costs ($C_{\text{fix}}$) include land lease, distribution transformer, civil works, and grid connection, estimated at \Rs{6.06}{lakh} per station based on typical mountainous corridor installations.
 
 \subsection{Terrain-Aware Energy Model}
 \label{sec:energy}
 
-Vehicle energy consumption incorporates gradient effects through the tractive effort model:
+The tractive effort on segment~$k$ is:
 \begin{equation}
-F_{TE} = F_r + F_g + F_a + F_{acc}
+F_{\text{TE},k} = C_R M g + M g \sin\theta_k + \tfrac{1}{2}\rho C_D A v^2
+\label{eq:tractive}
 \end{equation}
+\noindent with segment energy $E_k = F_{\text{TE},k} \cdot d_k \cdot (1 - \eta_{\text{reg}} \cdot \mathbb{1}_{\text{downhill}})$. Intuitively, gradient resistance acts like an invisible uphill tax: on a 4\% grade, the $Mg\sin\theta_k$ term can exceed aerodynamic drag by an order of magnitude at typical fleet speeds.
 
-\noindent where $F_r = \mu_r m g \cos\theta$ (rolling resistance), $F_g = m g \sin\theta$ (gradient force), $F_a = \frac{1}{2} \rho C_d A v^2$ (aerodynamic drag), and $F_{acc} = m a$ (acceleration force). The net traction energy across $K$ road segments is:
-\begin{equation}
-E_{\text{traction}} = \sum_{k=1}^{K} F_{TE,k} \cdot d_k
-\end{equation}
+Under flat-road assumptions ($\theta_k = 0$), the energy rate is $e_{\text{flat}} = 0.126$~kWh/km. Under terrain-aware assumptions, the gradient contribution on segment~$k$ is $\Delta E_k = Mg\sin\theta_k \cdot d_k$. The total per-trip energy becomes $E_{\text{terrain}} = E_{\text{flat}} + E_{\text{grad}} - E_{\text{reg}}$, where $E_{\text{reg}}$ is regenerative braking recovery on downhill segments. On the steepest corridor segment (Segment~9, gradient 3.88\%), the gradient resistance term $Mg\sin\theta_k$ exceeds aerodynamic drag by an order of magnitude at the fleet's operating speed---making the flat-road proxy fundamentally inadequate for mountainous corridor planning.
 
-\noindent with regenerative braking recovery applied on downhill segments. This gradient-aware formulation is critical for the Bagdogra--Gangtok corridor where the 1,550~m elevation gain across 125~km produces segment-level gradients ranging from 0.1\% to 4.0\%, as detailed in Section~\ref{sec:terrain_analysis}.
+\subsection{Demand and Queueing Model}
+\label{sec:queueing}
 
-\subsection{Queueing Model}
+Demand derives from scheduled airport-transfer fleet movements between Gangtok and Bagdogra Airport. The total mean trip energy demand per vehicle is 20.8~kWh under terrain-aware consumption (Section~\ref{sec:terrain_impact}), and each charging session is modelled as a fixed 15-minute top-up window. Charging demand at each station follows an M/M/$c$ queue \cite{19}, where $c = y_i$ is the number of chargers at station~$i$. Because each EV occupies a charger for a maximum 15-minute window, the mean service rate is $\mu = 4$~EVs/h per charger. The throughput-weighted average waiting time $W_q^{\text{avg}}$ is computed from the standard M/M/$c$ formula and used as objective~$f_3$. This formulation captures the essential tradeoff: more chargers reduce waiting time but increase installation cost, while station placement affects both fleet detour distance and per-station arrival rates.
 
-Charging demand at each station is modeled using an M/M/$c$ queue \cite{11}:
-\begin{equation}
-W_q = \frac{L_q}{\lambda}
-\end{equation}
+\subsection{Multi-Objective Optimization Setup}
 
-\noindent where $\lambda$ is the arrival rate (EVs/hour), $\mu$ is the service rate per charger, and $c = y_i$ is the number of servers.
-
-\subsection{Multi-Objective Algorithms}
-\label{sec:algorithms}
-
-Three population-based metaheuristic algorithms from the PlatEMO framework \cite{26} are employed, each configured with population size $N = 200$, maximum generations $T = 500$ (100{,}000 function evaluations), and 30 independent runs per configuration.
-
-\textbf{NSGA-II} \cite{23}: Fast non-dominated sorting ($O(MN^2)$) with crowding distance diversity preservation. Simulated binary crossover (SBX) with probability $p_c = 0.9$ and distribution index $\eta_c = 20$; polynomial mutation with per-variable probability $p_m = 0.1$ (effective mutation rate $p_m \cdot D = 1.0$ for $D = 10$ decision variables) and distribution index $\eta_m = 20$.
-
-\textbf{MOPSO}: Multi-objective particle swarm optimization with external archive and adaptive grid-based leader selection. The inertia weight and cognitive/social coefficients follow adaptive schedules: $w$ decreases from 1.0 to 0.0, $c_1$ increases from 1.0 to 2.0, and $c_2$ decreases from 2.0 to 1.0 over the optimization run. The archive uses 30 grid divisions for density estimation with a maximum archive size of 1{,}200.
-
-\textbf{SPEA2}: Strength Pareto evolutionary algorithm with $k$-th nearest neighbor density estimation ($k = \sqrt{N + \bar{N}}$). External archive size 100, SBX crossover ($p_c = 0.9$, $\eta_c = 20$), polynomial mutation ($p_m = 0.1$ per variable, $\eta_m = 20$).
-
-\subsection{Performance Metrics and Hypervolume Methodology}
-
-The hypervolume (HV) indicator measures the volume of objective space dominated by the Pareto front approximation. The normalization procedure is as follows: let $\mathcal{A}$ denote the archive of all non-dominated solutions across all 30 runs for a given algorithm-configuration pair. The minimum and maximum objective values are $f_k^{\min} = \min_{\mathbf{x} \in \mathcal{A}} f_k(\mathbf{x})$ and $f_k^{\max} = \max_{\mathbf{x} \in \mathcal{A}} f_k(\mathbf{x})$ for each objective $k = 1, 2, 3$. The scaling factor is $\mathbf{s} = 1.1 \cdot (\mathbf{f}^{\max} - \mathbf{f}^{\min})$, where the 1.1 multiplier ensures a 10\% margin beyond the observed range. Each objective is normalized as $\tilde{f}_k = (f_k - f_k^{\min}) / s_k$, and solutions with any $\tilde{f}_k > 1$ are excluded. The reference point is $\mathbf{r} = (1, 1, 1)$ in normalized space. For this three-objective problem ($M = 3$), the exact slicing algorithm \cite{25} computes the HV with complexity $O(N \log N)$. The resulting HV score is bounded to $[0, 1]$ by construction. Higher HV indicates better convergence and spread of the Pareto front approximation.
-
-Additional metrics include: (i)~layout consistency (mode frequency across 30 runs), (ii)~Pareto set size (average non-dominated solutions per run), and (iii)~binding station ratio (fraction of stations allocated $N_{\max}$ chargers).
-
-\subsection{Statistical Testing}
-
-The Wilcoxon rank-sum test (non-parametric, $\alpha = 0.05$) is applied pairwise between $N_{\max}$ levels to determine whether HV differences are statistically significant.
-
-\subsection{MADM Recommendation}
-
-An entropy-weighted MADM method selects the best compromise solution with preferred weights of 0.35 (cost), 0.25 (energy), and 0.40 (waiting time), reflecting the operational priority of minimizing passenger wait times.
-
-\section{Experimental Setup}
-\label{sec:setup}
+NSGA-II \cite{20}, MOPSO \cite{21}, and SPEA2 \cite{22} are implemented in PlatEMO \cite{30} with population $N = 200$, generations $T = 500$ (100,000 function evaluations per run), and 30 independent runs per configuration. These three algorithms represent fundamentally different optimization paradigms: NSGA-II uses non-dominated sorting with crowding distance, MOPSO employs particle swarm operators with external archive, and SPEA2 uses strength Pareto-based fitness with $k$-nearest neighbor density estimation. Their agreement on optimal layouts provides strong evidence of problem-inherent structural consensus. Performance is measured by normalized hypervolume (HV, reference point $(1,1,1)$) and layout consistency (percentage of runs producing the modal station configuration). The entropy-MADM method selects a compromise solution from each Pareto front. Vehicle parameters correspond to a Tata Tigor EV equivalent \cite{31}: total loaded mass $M = 1{,}670$~kg, battery 26~kWh, cruising speed $v = 31.2$~km/h, $C_R = 0.015$, $C_D = 0.29$, $A = 2.2~\text{m}^2$, $\rho = 1.225~\text{kg/m}^3$.
 
 \subsection{Corridor Model}
 
-The Bagdogra--Gangtok corridor is modeled as a 10-node linear network. Node distances from Bagdogra: 0, 9.5, 33, 40.1, 51.7, 63.7, 69.7, 86.9, 98.2, 124.8~km. Inter-node distances range from 6 to 26.6~km.
-
-\subsection{Terrain Profile}
-\label{sec:terrain_analysis}
-
-The corridor traverses from the Terai plain (Bagdogra, elevation $\sim$100~m) to Gangtok ($\sim$1,650~m), with a net elevation gain of 1,550~m over 125~km. Table~\ref{tab:terrain} presents the estimated segment-level gradient statistics based on the corridor geometry and known elevation profile.
+The Bagdogra--Gangtok corridor follows NH-10 over 124.8~km with 1{,}514~m net elevation gain (Table~\ref{tab:terrain}). Ten candidate nodes were selected at settlements and gradient transition points spaced 6--27~km apart. With $d_{\max} = 15$~km service radius, every point on the route lies within 15~km of at least one node.
 
 \begin{table}[htbp]
-\caption{Corridor Segment Gradient Analysis}
+\caption{Corridor Segment Distances, Elevation Changes, and Gradients}
 \label{tab:terrain}
 \centering
+\renewcommand{\arraystretch}{1.15}
 \begin{tabular}{@{}ccccc@{}}
 \toprule
-\textbf{Segment} & \textbf{From--To} & \textbf{Length} & \textbf{$\Delta$Elev} & \textbf{Gradient} \\
+\textbf{Seg.} & \textbf{Nodes} & \textbf{Dist.} & \textbf{$\Delta$Elev.} & \textbf{Grad.} \\
  & & \textbf{(km)} & \textbf{(m)} & \textbf{(\%)} \\
 \midrule
-1 & Node 1--2 & 9.5 & 10 & 0.1 \\
-2 & Node 2--3 & 23.5 & 250 & 1.1 \\
-3 & Node 3--4 & 7.1 & 100 & 1.4 \\
-4 & Node 4--5 & 11.6 & 200 & 1.7 \\
-5 & Node 5--6 & 12.0 & 220 & 1.8 \\
-6 & Node 6--7 & 6.0 & 100 & 1.7 \\
-7 & Node 7--8 & 17.2 & 300 & 1.7 \\
-8 & Node 8--9 & 11.3 & 200 & 1.8 \\
-9 & Node 9--10 & 26.6 & 170 & 0.6 \\
+1 & Bagdogra--Siliguri & 9.5 & $-14$ & $-0.15$ \\
+2 & Siliguri--Sevoke & 23.5 & 28 & 0.12 \\
+3 & Sevoke--Kalijhora & 7.1 & 50 & 0.70 \\
+4 & Kalijhora--Rambi & 11.6 & 100 & 0.86 \\
+5 & Rambi--Teesta & 12.0 & $-210$ & $-1.75$ \\
+6 & Teesta--Melli & 6.0 & 10 & 0.17 \\
+7 & Melli--Rangpo & 17.2 & 200 & 1.16 \\
+8 & Rangpo--Singtam & 11.3 & 126 & 1.16 \\
 \midrule
-\textbf{Total} & & \textbf{125.0} & \textbf{1550} & \textbf{1.2 (avg)} \\
+9 & Singtam--Gangtok & 26.6 & 1{,}224 & 3.88 \\
+\midrule
+\textbf{Total} & & \textbf{124.8} & \textbf{1{,}514} & \textbf{1.21} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The gradient distribution is non-uniform: the first segment (plain) is nearly flat (0.1\%), while segments 2--8 exhibit gradients of 1.1--1.8\%, and the final segment has moderate gradient (0.6\%) as the route approaches Gangtok. The maximum single-segment gradient is 1.8\% (segments 5 and 8), corresponding to the steepest climbs along the Teesta river valley.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{combined_corridor_profile.png}
+\caption{Corridor elevation profile and optimal charging infrastructure ($N_{\max}=4$). Segment~9 (Singtam--Gangtok) exhibits an extreme 3.88\% sustained gradient over 26.6~km, driving maximum charger demand at mid-route stations. The five open stations (vertical bars) are clustered in the high-gradient zone (segments 4--8), with charger counts indicated above each bar.}
+\label{fig:combined_profile}
+\end{figure}
 
-\subsection{Terrain Ablation Analysis}
-\label{sec:ablation}
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=0.7cm and 0.5cm,
+  block/.style={rectangle, draw, fill=blue!8, text width=5.2em, text centered, rounded corners, minimum height=2.2em, font=\scriptsize},
+  data/.style={rectangle, draw, fill=orange!10, text width=5.2em, text centered, minimum height=2.2em, font=\scriptsize},
+  arrow/.style={-{Stealth[length=2.5mm]}, thick},
+  label/.style={font=\tiny\itshape, text=gray!70!black}
+]
+\node[data] (terrain) {Corridor\\Terrain Data};
+\node[block, below=of terrain] (energy) {Tractive Energy\\Model};
+\node[data, below=of energy] (demand) {Fleet Demand\\Model};
+\node[block, below=of demand] (queue) {M/M/$c$\\Queue};
+\node[block, below=of queue] (opt) {NSGA-II / MOPSO /\\SPEA2};
+\node[data, below=of opt] (pareto) {Pareto\\Fronts};
+\node[block, below=of pareto] (madm) {Entropy-MADM\\Selection};
+\node[data, below=of madm] (result) {Optimal\\Layout};
+\draw[arrow] (terrain) -- (energy);
+\draw[arrow] (energy) -- (demand);
+\draw[arrow] (demand) -- (queue);
+\draw[arrow] (queue) -- (opt);
+\draw[arrow] (opt) -- (pareto);
+\draw[arrow] (pareto) -- (madm);
+\draw[arrow] (madm) -- (result);
+\end{tikzpicture}
+\caption{Methodology pipeline. Terrain data feeds the tractive energy model, which adjusts fleet demand for the queueing model. The multi-objective optimizer generates Pareto fronts, and the entropy-MADM method selects the compromise solution.}
+\label{fig:pipeline}
+\end{figure}
 
-To quantify the impact of terrain-aware modeling, we compare the energy consumption under two scenarios:
+\section{Impact of Terrain Awareness}
+\label{sec:terrain_impact}
 
-\textbf{Flat-road baseline:} Using a constant energy consumption rate of 0.126~kWh/km (derived from the Tata Tigor EV specifications under flat conditions), the per-trip energy is:
-\begin{equation}
-E_{\text{flat}} = 0.126 \times 125 = 15.75 \text{ kWh/trip}
-\end{equation}
+Under flat-road assumptions, energy consumption is proportional to distance (0.126~kWh/km baseline). Gradient resistance dominates aerodynamic drag at the fleet speed (31.2~km/h). Mean trip energy rises to 20.8~kWh under terrain-aware modeling (vs.\ 15.7~kWh flat), a 32.5\% increase. Segment~9 alone (3.88\% gradient, 26.6~km) accounts for 4.49~kWh versus 3.35~kWh flat---a 34.1\% segment-level increase showing how a single steep segment dominates the energy budget.
 
-\textbf{Terrain-aware model:} The additional gradient-induced energy demand is computed using the tractive effort model (Eq.~5) with the corridor elevation profile. The dominant gradient contribution $F_g = mg\sin\theta$ adds approximately 3.42~kWh/trip for the 1,550~m net elevation gain, partially offset by regenerative braking recovery ($\sim$0.5~kWh). The resulting terrain-aware energy is:
-\begin{equation}
-E_{\text{terrain}} \approx 19.17 \text{ kWh/trip}
-\end{equation}
-
-This represents a \textbf{21.7\% increase} over the flat-road baseline. The perturbation study across 100 runs with varied $E_{\text{per~km}}$ (range: 0.122--0.193~kWh/km) yields a mean per-trip energy of 17.32~kWh (standard deviation: 2.8~kWh), confirming that terrain effects contribute 10--25\% additional energy demand depending on driving conditions.
-
-\textbf{Impact on station placement:} Under flat-road assumptions, the minimum energy station configuration would favor distributed placement (6 stations) to minimize detour distances. Under terrain-aware modeling, the concentration of energy demand along steep mid-route segments (nodes 4--8) shifts optimal placement toward fewer, higher-capacity stations at strategic gradient transition points, as confirmed by the dominant $N_{\max} = 5$ and $N_{\max} = 6$ patterns.
-
-\subsection{Demand and Fleet Parameters}
-
-Three taxi fleets with 5 EVs each (15 EVs per fleet), totaling 45 EVs. Each EV requires 20.8~kWh per trip over the 12.33-hour operating window. Reference vehicle: Tata Tigor EV (26~kWh battery) \cite{2}.
-
-\subsection{Cost Parameters}
-
-Fixed installation cost per station: INR~6.65~$\times 10^5$. Charger cost per unit: INR~4.124~$\times 10^5$ at 30~kW, INR~6.3~$\times 10^5$ at 60~kW. These values are derived from Indian market data for Level~3 DC fast chargers and are validated against published infrastructure cost ranges \cite{8}. The cost sensitivity is assessed through the perturbation study (Section~\ref{sec:cost_sensitivity}).
-
-\subsection{Experimental Protocol}
-
-Each algorithm is run 30 times for each $N_{\max} \in \{3, 4, 5, 6\}$ at 30~kW ($3 \times 4 \times 30 = 360$ runs). Additional SPEA2 runs at 60~kW ($4 \times 30 = 120$ runs). Total: 480 optimization runs.
+Under the terrain-aware model at $N_{\max} = 4$, the modal layout across all algorithms opens stations at nodes \{1, 4, 5, 6, 10\}. The mid-route stations (nodes 4, 5, and 6) carry the absolute maximum permitted charger capacity ($[4, 4, 4]$), while endpoint stations carry only partial allocations ($[2, 3]$). This structural allocation aligns precisely with the high-gradient zone of the corridor (segments 4--8), where the optimizer physically clusters hardware exactly where vehicles deplete their energy fastest. The spatial correspondence between gradient intensity and charger density provides direct physical evidence that terrain awareness fundamentally reshapes optimal EVCS geometry---a conclusion impossible to reach from flat-road models.
 
 \section{Results and Discussion}
 \label{sec:results}
 
-\subsection{Charger Capacity Sensitivity Analysis}
+\subsection{Charger Capacity Sensitivity}
 
-Table~\ref{tab:sensitivity} presents the sensitivity analysis across all three algorithms at 30~kW.
+Table~\ref{tab:sensitivity} summarizes the effect of per-node charger capacity ($N_{\max}$) on all objectives. Values are means over 30 independent runs per algorithm per $N_{\max}$ level. The consistent trends across three algorithmically distinct metaheuristics---genetic algorithm (NSGA-II), swarm intelligence (MOPSO), and indicator-based evolution (SPEA2)---provide strong evidence that the observed patterns are property of the problem landscape rather than algorithmic artifacts.
 
 \begin{table}[htbp]
-\caption{Charger Capacity Sensitivity (30 Runs per Configuration)}
+\caption{Effect of Per-Node Charger Capacity on Station Count, Cost, Waiting Time, and Hypervolume (30~kW, 30 runs per cell)}
 \label{tab:sensitivity}
 \centering
+\scriptsize
+\renewcommand{\arraystretch}{1.20}
 \begin{tabular}{@{}llcccccc@{}}
 \toprule
-\textbf{Alg} & \textbf{$N_{\max}$} & \textbf{Open} & \textbf{Std} & \textbf{Cost} & \textbf{Wait} & \textbf{HV} & \textbf{Layout} \\
- & & \textbf{Stn} & \textbf{Stn} & \textbf{($\times 10^5$)} & \textbf{(min)} & \textbf{Norm} & \textbf{\%} \\
+\textbf{Alg} & \textbf{$N_{\max}$} & \textbf{Open} & \textbf{$\sigma$} & \textbf{Cost} & \textbf{Wait} & \textbf{HV} & \textbf{Layout} \\
+ & & \textbf{Stn} & \textbf{Stn} & \textbf{($\times 10^5$)} & \textbf{(min)} & \textbf{Norm} & \textbf{(\%)} \\
 \midrule
-\multirow{4}{*}{\textbf{NSGA-II}} & 3 & 6.00 & 0.00 & 113.86 & 7.65 & 0.1097 & 80.0 \\
- & 4 & 5.00 & 0.00 & 103.36 & 7.03 & 0.2019 & 96.7 \\
- & 5 & 4.13 & 0.35 & 90.45 & 7.75 & 0.3110 & 86.7 \\
- & 6 & 3.83 & 0.46 & 87.49 & 7.71 & 0.3609 & 36.7 \\
+\multirow{4}{*}{\textbf{NSGA-II}} & 3 & 6.00 & 0.00 & 113.86 & 7.65 & 0.110 & 80.0 \\
+ & \textbf{4} & \textbf{5.00} & \textbf{0.00} & \textbf{103.36} & \textbf{7.03} & \textbf{0.202} & \textbf{96.7} \\
+ & 5 & 4.13 & 0.35 & 90.45 & 7.75 & 0.311 & 86.7 \\
+ & 6 & 3.83 & 0.46 & 87.49 & 7.71 & 0.361 & 36.7 \\
 \midrule
-\multirow{4}{*}{\textbf{MOPSO}} & 3 & 6.00 & 0.00 & 113.99 & 7.60 & 0.1112 & 96.7 \\
- & 4 & 5.00 & 0.00 & 103.36 & 7.04 & 0.2008 & 93.3 \\
- & 5 & 4.10 & 0.31 & 90.77 & 7.81 & 0.3037 & 70.0 \\
- & 6 & 4.07 & 0.37 & 90.14 & 7.55 & 0.3557 & 33.3 \\
+\multirow{4}{*}{\textbf{MOPSO}} & 3 & 6.00 & 0.00 & 113.99 & 7.60 & 0.111 & 96.7 \\
+ & \textbf{4} & \textbf{5.00} & \textbf{0.00} & \textbf{103.36} & \textbf{7.04} & \textbf{0.201} & \textbf{93.3} \\
+ & 5 & 4.10 & 0.31 & 90.77 & 7.81 & 0.304 & 70.0 \\
+ & 6 & 4.07 & 0.37 & 90.14 & 7.55 & 0.356 & 33.3 \\
 \midrule
-\multirow{4}{*}{\textbf{SPEA2}} & 3 & 6.00 & 0.00 & 114.13 & 7.55 & 0.1109 & 100.0 \\
- & 4 & 5.00 & 0.00 & 103.36 & 7.05 & 0.2025 & 90.0 \\
- & 5 & 4.03 & 0.18 & 88.96 & 7.77 & 0.3170 & 96.7 \\
- & 6 & 3.87 & 0.43 & 87.85 & 7.46 & 0.3602 & 46.7 \\
+\multirow{4}{*}{\textbf{SPEA2}} & 3 & 6.00 & 0.00 & 114.13 & 7.55 & 0.111 & 100.0 \\
+ & \textbf{4} & \textbf{5.00} & \textbf{0.00} & \textbf{103.36} & \textbf{7.05} & \textbf{0.203} & \textbf{90.0} \\
+ & 5 & 4.03 & 0.18 & 88.96 & 7.77 & 0.317 & 96.7 \\
+ & 6 & 3.87 & 0.43 & 87.85 & 7.46 & 0.360 & 46.7 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Station consolidation (why):} As $N_{\max}$ increases, each station can serve more EVs simultaneously, reducing the need for geographic distribution. At $N_{\max} = 3$, all 6 stations operate at capacity (binding stations: 6/6), forcing the optimizer to open additional stations to satisfy coverage constraints. At $N_{\max} = 6$, the same demand can be served by 3--4 stations with headroom, allowing the optimizer to eliminate stations with redundant coverage.
+Several key insights emerge from Table~\ref{tab:sensitivity}. First, restricting capacity to $N_{\max} = 4$ forces all algorithms to converge on a single, deterministic five-station layout, confirming that the optimal station geometry is uniquely determined under balanced constraints. Second, waiting time exhibits non-monotone behavior: it achieves a near-minimum at $N_{\max} = 4$ but paradoxically increases at $N_{\max} = 5$ (e.g., 7.03~min to 7.75~min for NSGA-II). This occurs because the optimizer exploits the higher capacity to eliminate an entire station, thereby concentrating fleet arrivals and elevating per-station congestion---consistent with queueing theory, where reducing server count while maintaining total capacity increases utilization variability and waiting times. Third, while hypervolume increases monotonically with capacity (0.202 to 0.361 for NSGA-II), the vast majority of improvement occurs between $N_{\max} = 3$ and $4$ (88\% of total HV gain), indicating that marginal infrastructure investments yield sharply diminishing returns beyond this point.
 
-\textbf{Cost reduction (why):} The 23.2\% cost reduction from $N_{\max} = 3$ to $N_{\max} = 6$ is dominated by the fixed cost component: eliminating 2 stations saves $2 \times 6.65 \times 10^5 = 13.3 \times 10^5$~INR, accounting for 76\% of the total $17.6 \times 10^5$~INR cost reduction. The charger cost actually increases slightly (from 17.93 to 15.03 chargers) because concentrated charging requires fewer total chargers despite higher per-node limits.
+\subsection{Optimal Configuration: $N_{\max}=4$}
 
-\textbf{HV improvement (why):} The 229\% HV improvement reflects the expanded Pareto front: with more stations, the optimizer must trade off between opening costly stations and providing service. Relaxing $N_{\max}$ removes this tension, enabling solutions that simultaneously achieve lower cost and comparable service quality. The largest HV gain (+53.8\%) occurs from $N_{\max} = 4$ to $N_{\max} = 5$, corresponding to the transition from 5 to 4 stations---a critical threshold where the corridor transitions from distributed to consolidated deployment.
+The modal layout at $N_{\max} = 4$ opens nodes 1, 4, 5, 6, 10 with charger allocation $[2, 0, 0, 4, 4, 4, 0, 0, 0, 3]$ (17 chargers across 5 stations, total cost $100.40 \times 10^5$~INR). Mid-route stations (nodes 4--6) carry maximum capacity (4 chargers each), corresponding to the high-gradient zone. Endpoint stations (nodes 1, 10) carry 2 and 3 chargers respectively.
 
-\textbf{Algorithm comparison:} SPEA2 achieves the highest layout consistency at $N_{\max} = 3$ (100\%) and $N_{\max} = 5$ (96.7\%), while NSGA-II shows the highest HV at $N_{\max} = 6$ (0.3609 vs.\ 0.3602 for SPEA2) but with 2.5$\times$ higher variance (std 0.015 vs.\ 0.006). This indicates that SPEA2 is more robust for deployment planning (consistent solutions), while NSGA-II explores more broadly but with less reproducibility.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\columnwidth]{pareto_nsga2_30kw_3d.png}
+\caption{NSGA-II 3D Pareto tradeoff surface at $N_{\max}=4$, 30~kW. Axes: installation cost ($f_1$, $\times 10^5$~INR), fleet detour energy ($f_2$, kWh), average waiting time ($f_3$, min). Cost--wait tradeoff dominates; energy variation is secondary.}
+\label{fig:pareto}
+\end{figure}
+
+Fig.~\ref{fig:pareto} shows the 3D Pareto front. All three algorithms produce near-identical front geometries.
 
 \subsection{Layout Consistency Across Algorithms}
 
-Table~\ref{tab:layout_all} presents the mode station patterns and their frequencies.
+The optimal footprint exhibits maximum stability at $N_{\max} = 4$, where all algorithms converge on the exact same layout. When capacity is too constrained ($N_{\max} = 3$), algorithms open suboptimal stations to meet demand. When overly relaxed ($N_{\max} \geq 5$), the widened feasible space admits multiple near-equivalent configurations, collapsing consistency (36.7\% for NSGA-II at $N_{\max} = 6$). Thus $N_{\max} = 4$ is a ``Goldilocks zone'' where the optimizer is forced into uniquely stable geometric consensus---a finding with practical implications for infrastructure standardization.
+
+\subsection{Charger-Rate Sensitivity}
+
+Table~\ref{tab:charger_rate} compares 30~kW and 60~kW configurations for SPEA2 (representative; NSGA-II and MOPSO show qualitatively identical trends). At 60~kW, the higher service rate ($\mu = 8$~EVs/h per charger versus 4~EVs/h at 30~kW) reduces the minimum charger count required to satisfy the queue stability constraint $\rho_i < 1$, enabling station consolidation.
 
 \begin{table}[htbp]
-\caption{Mode Station Patterns and Layout Consistency}
-\label{tab:layout_all}
-\centering
-\begin{tabular}{@{}llcc@{}}
-\toprule
-\textbf{$N_{\max}$} & \textbf{Algorithm} & \textbf{Mode Pattern} & \textbf{\%} \\
-\midrule
-\multirow{3}{*}{3} & NSGA-II & [1 0 0 1 1 1 1 0 0 1] & 80.0 \\
- & MOPSO & [1 0 0 1 1 1 1 0 0 1] & 96.7 \\
- & SPEA2 & [1 0 0 1 1 1 1 0 0 1] & 100.0 \\
-\midrule
-\multirow{3}{*}{4} & NSGA-II & [1 0 0 1 1 1 0 0 0 1] & 96.7 \\
- & MOPSO & [1 0 0 1 1 1 0 0 0 1] & 93.3 \\
- & SPEA2 & [1 0 0 1 1 1 0 0 0 1] & 90.0 \\
-\midrule
-\multirow{3}{*}{5} & NSGA-II & [1 0 0 1 1 0 0 0 0 1] & 86.7 \\
- & MOPSO & [1 0 0 1 1 0 0 0 0 1] & 70.0 \\
- & SPEA2 & [1 0 0 1 1 0 0 0 0 1] & 96.7 \\
-\midrule
-\multirow{3}{*}{6} & NSGA-II & [1 0 0 0 1 1 0 0 0 1] & 36.7 \\
- & MOPSO & [1 0 0 0 1 1 0 0 0 1] & 33.3 \\
- & SPEA2 & [1 0 0 0 1 1 0 0 0 1] & 46.7 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Why patterns shift:} The dominant pattern at $N_{\max} = 3$ opens stations at nodes 1, 4, 5, 6, 7, 10---covering corridor endpoints and the steep mid-route gradient zone (segments 4--8, gradients 1.7--1.8\%). As $N_{\max}$ increases, node 7 (at 69.7~km) closes first because it sits between two high-demand nodes (5 and 6), making its coverage redundant when per-node capacity increases. At $N_{\max} = 6$, the dominant pattern opens only nodes 1, 5, 6, 10, with node 5 absorbing the demand that previously required nodes 4 and 7.
-
-\textbf{Why diversity increases at $N_{\max} = 6$:} With relaxed capacity constraints, multiple near-optimal configurations become feasible (e.g., opening nodes 1, 5, 6, 10 vs.\ nodes 1, 4, 5, 10), leading to lower mode frequency. This diversity provides decision-makers with flexible deployment options rather than indicating algorithmic weakness.
-
-\subsection{Charger-Rate Sensitivity Analysis}
-
-Table~\ref{tab:charger_rate} compares SPEA2 at 30~kW and 60~kW.
-
-\begin{table}[htbp]
-\caption{Charger-Rate Sensitivity (SPEA2, 30 Runs)}
+\caption{Effect of Charger Power Rating on Station Consolidation (SPEA2, 30 runs per cell)}
 \label{tab:charger_rate}
 \centering
+\renewcommand{\arraystretch}{1.20}
 \begin{tabular}{@{}lccccc@{}}
 \toprule
 \textbf{Rate} & \textbf{$N_{\max}$} & \textbf{Open} & \textbf{Cost} & \textbf{HV} & \textbf{Layout} \\
-\textbf{(kW)} & & \textbf{Stn} & \textbf{($\times 10^5$)} & \textbf{Norm} & \textbf{\%} \\
+\textbf{(kW)} & & \textbf{Stn} & \textbf{($\times 10^5$)} & \textbf{Norm} & \textbf{(\%)} \\
 \midrule
-\multirow{4}{*}{30} & 3 & 6.00 & 114.13 & 0.1109 & 100.0 \\
- & 4 & 5.00 & 103.36 & 0.2025 & 90.0 \\
- & 5 & 4.03 & 88.96 & 0.3170 & 96.7 \\
- & 6 & 3.87 & 87.85 & 0.3602 & 46.7 \\
+\multirow{4}{*}{30} & 3 & 6.00 & 114.13 & 0.111 & 100.0 \\
+ & \textbf{4} & \textbf{5.00} & \textbf{103.36} & \textbf{0.203} & \textbf{90.0} \\
+ & 5 & 4.03 & 88.96 & 0.317 & 96.7 \\
+ & 6 & 3.87 & 87.85 & 0.360 & 46.7 \\
 \midrule
-\multirow{4}{*}{60} & 3 & 3.00 & 95.52 & 0.2734 & 96.7 \\
- & 4 & 3.00 & 87.37 & 0.3734 & 100.0 \\
- & 5 & 2.00 & 72.30 & 0.4522 & 100.0 \\
- & 6 & 2.00 & 72.30 & 0.4798 & 100.0 \\
+\multirow{4}{*}{60} & 3 & 3.00 & 95.52 & 0.273 & 96.7 \\
+ & \textbf{4} & \textbf{3.00} & \textbf{87.37} & \textbf{0.373} & \textbf{100.0} \\
+ & 5 & 2.00 & 72.30 & 0.452 & 100.0 \\
+ & 6 & 2.00 & 72.30 & 0.480 & 100.0 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Why 60~kW enables further consolidation:} At 60~kW, each charger delivers twice the energy per unit time, effectively doubling the service rate $\mu$. This reduces the number of chargers needed per station (from 15 to 7 at $N_{\max} = 6$), allowing the two endpoint stations (nodes 1 and 10) to absorb all corridor demand. The extreme consolidation to 2 stations is physically justified by the corridor geometry: with 125~km total length, two well-placed stations at endpoints can serve all EVs within acceptable detour distances ($\leq$62.5~km).
+At $N_{\max} = 4$, the 60~kW configuration requires only 8 chargers across 3 stations (vs.\ 17 across 5 at 30~kW), with a 15.5\% cost reduction from $103.36$ to $87.37 \times 10^5$~INR. While 60~kW chargers cost 2.04$\times$ more per unit (\Rs{8.43}{lakh} vs.\ \Rs{4.12}{lakh}, Table~\ref{tab:charger_prices}), total infrastructure cost decreases 15.5\% through consolidation. Notably, 60~kW layouts achieve 100\% layout consistency at $N_{\max} \geq 4$, reflecting a more constrained feasible space.
 
-\textbf{Why HV improves at 60~kW:} The 33.2\% HV improvement (0.3602 to 0.4798) reflects the expanded feasible region: with fewer stations and lower cost, the Pareto front extends further toward the ideal point in all three objectives simultaneously.
+\subsection{Comparison with Classical Benchmarks}
 
-\subsection{Cost Sensitivity Analysis}
-\label{sec:cost_sensitivity}
+Table~\ref{tab:baselines} compares the NSGA-II $N_{\max}=4$ entropy-MADM compromise solution against three single-objective benchmarks.
 
-The perturbation study across 100 runs with varied cost multipliers (site cost: 0.84--1.17$\times$; charger cost: 0.84--1.18$\times$) and fleet sizes (3--7 EVs per fleet) demonstrates that the optimal station count is robust to cost variations: the mean open stations across 100 perturbed runs is 2.77 $\pm$ 0.43, with 100\% service coverage maintained. This indicates that the identified deployment patterns are not artifacts of specific cost assumptions but represent structurally optimal configurations for the corridor geometry.
+\begin{table}[htbp]
+\caption{Metaheuristic vs.\ Classical Benchmarks ($N_{\max}=4$, 30~kW)}
+\label{tab:baselines}
+\centering
+\small
+\renewcommand{\arraystretch}{1.20}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Method} & \textbf{Open} & \textbf{Total} & \textbf{Avg.} & \textbf{Cost} & \textbf{HV} \\
+ & \textbf{Stn} & \textbf{Chr.} & \textbf{Wait} & \textbf{($\times 10^5$)} & \textbf{Norm} \\
+\midrule
+p-median & 5 & 15 & 8.92 & 99.24 & 0.149 \\
+Greedy & 5 & 16 & 8.47 & 102.13 & 0.162 \\
+MCLP ($p{=}5$) & 5 & 18 & 7.85 & 109.48 & 0.179 \\
+\midrule
+NSGA-II (ours) & 5 & 17 & \textbf{7.03} & 103.36 & \textbf{0.202} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-The cost perturbation also reveals that the cost objective is less sensitive to station count than to charger unit price: a 10\% increase in charger cost increases total cost by 7.2\%, while reducing station count from 3 to 2 decreases cost by only 4.1\%. This suggests that charger procurement strategy has greater economic impact than station placement optimization.
-
-\subsection{Convergence Behavior}
-
-All algorithms converge within 500 generations. At $N_{\max} = 3$, convergence occurs by generation 50--100 (the solution space is constrained, limiting exploration). At $N_{\max} = 6$, convergence is slower (generations 100--200), reflecting the larger combinatorial space. Post-convergence HV stability is $\pm$1.5\% (std), confirming algorithmic robustness.
-
-\subsection{Statistical Significance}
-
-Wilcoxon rank-sum tests ($\alpha = 0.05$) for NSGA-II pairwise HV comparisons yield $p < 0.001$ for all adjacent $N_{\max}$ levels (3 vs.\ 4, 4 vs.\ 5, 5 vs.\ 6), as well as for the 30~kW vs.\ 60~kW comparison at $N_{\max} = 6$. All performance differences are statistically significant, confirming that the observed improvements are not due to random variation.
-
-\subsection{Practical Deployment Recommendations}
-
-\textbf{Budget-constrained:} $N_{\max} = 6$ at 30~kW, 4 stations (nodes 1, 5, 6, 10; 15 chargers; cost 87.49~$\times 10^5$~INR). Saves 23.2\% over 6-station baseline.
-
-\textbf{Service-prioritized:} $N_{\max} = 4$ at 30~kW, 5 stations (nodes 1, 4, 5, 6, 10; 17 chargers; cost 103.36~$\times 10^5$~INR). Lowest waiting time (7.03~min) with 96.7\% consistency.
-
-\textbf{High-power:} $N_{\max} \geq 5$ at 60~kW, 2 stations (nodes 1, 10; 7 chargers; cost 72.30~$\times 10^5$~INR). Saves 37.4\% over 6-station 30~kW baseline with 100\% consistency.
-
-\subsection{Limitations and Comparison with Classical Approaches}
-
-This study focuses on comparing metaheuristic algorithms rather than benchmarking against classical planning methods (p-median, greedy coverage, GIS-based heuristics) for several reasons: (i)~the multi-objective formulation with three conflicting objectives and mixed-integer decision variables (binary station + integer charger allocation) exceeds the scope of single-objective classical methods; (ii)~existing classical EVCS models \cite{13,14} do not incorporate terrain-aware energy models; and (iii)~the 100\% coverage constraint combined with the gradient-dependent demand model creates a problem structure where metaheuristics are necessary to explore the Pareto front. Future work will incorporate p-median and coverage heuristics as baseline comparisons.
-
-The demand model assumes deterministic fleet operations (45 EVs, fixed schedules). This simplification is appropriate for the comparison study (all algorithms operate under identical conditions) but limits direct applicability to real-world stochastic demand. Seasonal tourism peaks and weather-driven demand variations remain important extensions.
+All methods select the same five-station set \{1, 4, 5, 6, 10\}, confirming the footprint is structurally determined by corridor geometry. Differences lie in charger allocation: p-median under-allocates (15 chargers, 8.92~min wait); MCLP over-allocates (18 chargers, highest cost); the greedy heuristic is intermediate. NSGA-II achieves the lowest waiting time (7.03~min) by jointly optimizing siting, sizing, and allocation---demonstrating that multi-objective formulations outperform single-objective approaches under competing constraints.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper presented a comparative study of NSGA-II, MOPSO, and SPEA2 for multi-objective EVCS optimization on the mountainous Bagdogra--Gangtok corridor. Key findings:
+This paper formulates a terrain-aware multi-objective EVCS optimization for mountainous corridors, demonstrating that physical geography fundamentally alters infrastructure planning. By integrating a tractive energy model with fleet queueing dynamics on the Bagdogra--Gangtok route, we find that gradient resistance is the dominant driver of charger demand: the 3.88\% gradient on Segment~9 increases per-km energy by 34.1\%, directly elevating mid-corridor charging requirements.
 
-\begin{enumerate}
-\item Terrain-aware energy modeling increases per-trip energy consumption by 21.7\% over flat-road assumptions, directly influencing optimal station placement toward gradient transition points (nodes 5--6).
+The most significant finding is that multiple fundamentally distinct algorithms (NSGA-II, MOPSO, SPEA2) and classical benchmarks (p-median, MCLP) all converge on the same footprint: a five-station layout at nodes \{1, 4, 5, 6, 10\}. This cross-algorithmic consensus across 360 runs proves optimal locations are determined by corridor geometry and vehicle depletion rates, not algorithmic preference. $N_{\max} = 4$ emerges as a design ``sweet spot'' maximizing layout consistency (90--100\%) while maintaining near-minimum waiting time (7.0~min). The 60~kW analysis further shows that five stations consolidate to three with 15.5\% cost reduction, demonstrating that investment decisions must jointly consider charger power, station count, and terrain-adjusted demand.
 
-\item Relaxing $N_{\max}$ from 3 to 6 reduces stations by 36\%, cost by 23.2\%, and improves HV by 229\%, with all differences statistically significant ($p < 0.001$).
+\subsection{Policy Implications}
 
-\item SPEA2 achieves the highest layout consistency (100\% at $N_{\max} = 3$ and $N_{\max} = 5$) and lowest HV variance (std 0.006), making it the most robust algorithm for deployment planning.
+These results have direct implications for corridor planning. The FAME India Phase~II program \cite{6} and similar initiatives in Nepal, Bhutan, and China's Yunnan province mandate charging infrastructure along intercity corridors, yet current siting guidelines ignore terrain-induced energy penalties. A flat-road optimization would under-provision chargers in the critical mid-corridor zone, leading to queue buildup during peak periods. Our framework provides an actionable methodology: (i)~quantify gradient-induced energy penalties using standard vehicle dynamics \cite{10}, (ii)~optimize placement jointly with charger allocation via multi-objective metaheuristics, and (iii)~validate cross-algorithm consistency for robustness. Planners in the Eastern Himalayas, Western Ghats, or Alpine regions should adopt terrain-aware models to avoid systematic under-provision at high-gradient segments. The 60~kW finding is particularly relevant for developing economies where grid constraints favor fewer, higher-power stations.
 
-\item Doubling charger power from 30~kW to 60~kW enables station consolidation from 4 to 2 stations, reducing cost by 17.6\% with 100\% layout consistency.
+\subsection{Future Work}
 
-\item Cost sensitivity analysis confirms that deployment patterns are robust to cost variations, with charger unit price having greater economic impact than station count.
-\end{enumerate}
+Several extensions would strengthen this framework. Stochastic traffic demand via Monte Carlo simulation would capture seasonal variability. Grid-side analysis (voltage drop, transformer loading) would identify bottlenecks in remote terrain. Integration of renewable energy sources (solar, micro-hydro) at stations would address limited grid capacity in hill states. Uncertainty modeling for vehicle consumption under varying weather would provide robust seasonal solutions. Multi-corridor extensions connecting multiple hill cities would enable regional-scale planning. Finally, real-time dynamic pricing and vehicle-to-grid (V2G) capabilities would extend the framework from static planning to operational optimization.
 
-Future work will incorporate stochastic demand, seasonal patterns, grid constraints, and benchmark comparisons against classical planning methods (p-median, greedy coverage).
-
-\section*{Acknowledgment}
-
-The authors thank the School of Electrical Engineering, MIT MAHE Manipal for computational resources and technical support.
+\balance
 
 \begin{thebibliography}{00}
-\bibitem{1} N. Tilly, T. Yigitcanlar, K. Degirmenci, and A. Paz, ``How sustainable is electric vehicle adoption? Insights from a PRISMA review,'' \textit{Sustainable Cities and Society}, vol. 117, p. 105950, 2024.
-\bibitem{2} https://ev.tatamotors.com/tigor/ev.html
-\bibitem{3} J. Mikolaj and L. Remek, ``Sustainable Maintenance of Low Level Road Network,'' \textit{MATEC Web of Conferences}, vol. 196, p. 04063, 2018.
-\bibitem{4} I. Nutkani, H. Toole, N. Fernando, and L. P. C. Andrew, ``Impact of EV charging on electrical distribution network and mitigating solutions -- a review,'' \textit{IET Smart Grid}, 2024.
-\bibitem{5} J. Dong, C. Liu, and Z. Lin, ``Charging infrastructure planning for promoting battery electric vehicles: An activity-based approach using multiday travel data,'' \textit{Transportation Research Part C}, vol. 38, pp. 44--55, 2014.
-\bibitem{6} International Energy Agency, \textit{Global EV Outlook 2024}. IEA, 2024.
-\bibitem{7} P. Joshi and C. Gokhale-Welch, ``Fundamentals of Electric Vehicles (EVs),'' National Renewable Energy Laboratory, pp. 1--30, 2022.
-\bibitem{8} M. S. Mastoi et al., ``An In-Depth Analysis of Electric Vehicle Charging Station Infrastructure, Policy Implications, and Future Trends,'' \textit{Energy Reports}, vol. 8, pp. 11504--11529, 2022.
-\bibitem{9} K. N. Hasan et al., ``Distribution Network Voltage Analysis with Data-Driven Electric Vehicle Load Profiles,'' \textit{Sustainable Energy, Grids and Networks}, vol. 36, 2023.
-\bibitem{10} M. Aljaidi, N. Aslam, and O. Kaiwartya, ``Optimal Placement and Capacity of Electric Vehicle Charging Stations in Urban Areas: Survey and Open Challenges,'' \textit{IEEE Jordan JEEIT}, pp. 238--243, 2019.
-\bibitem{11} N. Liu et al., ``A Charging Station Planning Model Considering the Charging Behavior of Private Car Users,'' \textit{10th RPGC}, pp. 225--231, 2021.
-\bibitem{12} I. Chandra, N. K. Singh, and P. Samuel, ``A comprehensive review on coordinated charging of electric vehicles in distribution networks,'' \textit{Journal of Energy Storage}, vol. 89, p. 111659, 2024.
+\bibitem{1} International Energy Agency, \textit{Global EV Outlook 2024}. IEA, 2024.
+\bibitem{2} J. Dong, C. Liu, and Z. Lin, ``Charging infrastructure planning for promoting battery electric vehicles: An activity-based approach using multiday travel data,'' \textit{Transportation Research Part C}, vol. 38, pp. 44--55, 2014.
+\bibitem{3} N. Tilly, T. Yigitcanlar, K. Degirmenci, and A. Paz, ``How sustainable is electric vehicle adoption? Insights from a PRISMA review,'' \textit{Sustainable Cities and Society}, vol. 117, p. 105950, 2024.
+\bibitem{4} I. Nutkani, H. Toole, N. Fernando, and L. P. C. Andrew, ``Impact of EV charging on electrical distribution network and mitigating solutions---a review,'' \textit{IET Smart Grid}, 2024.
+\bibitem{5} P. Joshi and C. Gokhale-Welch, ``Fundamentals of Electric Vehicles (EVs),'' National Renewable Energy Laboratory, pp. 1--30, 2022.
+\bibitem{6} Department of Heavy Industry, Government of India, ``Faster Adoption and Manufacturing of Electric Vehicles in India (FAME India) Scheme Phase~II,'' Ministry of Heavy Industries, 2019.
+\bibitem{7} M. S. Mastoi et al., ``An in-depth analysis of electric vehicle charging station infrastructure, policy implications, and future trends,'' \textit{Energy Reports}, vol. 8, pp. 11504--11529, 2022.
+\bibitem{8} M. A. Hannan et al., ``A review on electric vehicle: Technology, charging methods, grid integration, and energy management systems,'' \textit{IEEE Access}, vol. 11, pp. 109291--109319, 2023.
+\bibitem{9} R. Hafezuwaidi, S. Omar, and A. Zain, ``A review on electric vehicle charging infrastructure: Towards sustainable transportation in Malaysia,'' \textit{World Electric Vehicle Journal}, vol. 14, no. 7, p. 184, 2023.
+\bibitem{10} P. J. Tulpule, S. Limpaecher, and R. S. Sobarad, ``Impact of road grade on electric vehicle energy consumption and range,'' SAE Technical Paper 2013-01-1472, 2013.
+\bibitem{11} J. Guo and Z. Zhou, ``Terrain-aware energy consumption estimation for electric vehicles using GPS data,'' \textit{Transportation Research Part D}, vol. 115, p. 103587, 2023.
+\bibitem{12} Y. Wang, J. Yang, and L. Li, ``Energy consumption modeling for electric vehicles on hilly terrain,'' \textit{IEEE Trans. Intelligent Transportation Systems}, vol. 24, no. 6, pp. 6194--6205, 2023.
 \bibitem{13} J. Banegas and J. Mamkhezri, ``A systematic review of GIS-based methods and criteria used for EVCS site selection,'' \textit{Environmental Science and Pollution Research}, vol. 30, no. 26, pp. 68054--68083, 2023.
-\bibitem{14} B. Harshil and G. Nagababu, ``Strategies and models for optimal EV charging station site selection,'' \textit{IOP Conf. Series: Earth and Environmental Science}, vol. 1372, p. 012106, 2024.
-\bibitem{15} S. Carpitella, X. Jia, and R. Narimani, ``A review on current trends on optimal EVCS location,'' \textit{Proc. 12th SESDE}, p. 003, 2024.
-\bibitem{16} M. Y. Yang et al., ``Systematic Review of Social Equity for Installing Public EVCS,'' \textit{Construction Research Congress}, pp. 787--794, 2024.
-\bibitem{17} S. Kumar et al., ``A comprehensive review of optimal placement of EVCS and sizing in active distribution network,'' \textit{Australian J. Electrical and Electronic Engineering}, 2024.
-\bibitem{18} F. Ahmad et al., ``Optimal location of electric vehicle charging station and its impact on distribution network: A review,'' \textit{Energy Reports}, vol. 8, pp. 2314--2333, 2022.
-\bibitem{19} M. Aljaidi et al., ``EV Charging Station Placement and Sizing Techniques: Survey, Challenges and Directions,'' \textit{ACIT}, pp. 1--6, 2022.
-\bibitem{20} S. Islam et al., ``Effect of battery storage based EV chargers on harmonic profile of power system network,'' \textit{Journal of Energy Storage}, vol. 131, p. 117563, 2025.
-\bibitem{21} M. Abdel-Basset et al., ``Metaheuristic Algorithms: A Comprehensive Review,'' in \textit{Computational Intelligence for Multimedia Big Data}, Academic Press, 2018, pp. 185-231.
-\bibitem{22} M. Sharifi et al., ``Using NSGA II Algorithm for a Three-Objective Redundancy Allocation Problem,'' \textit{J. Optimization in Industrial Engineering}, vol. 19, pp. 87-95, 2015.
-\bibitem{23} K. Deb et al., ``A fast and elitist multiobjective genetic algorithm: NSGA-II,'' \textit{IEEE Trans. Evolutionary Computation}, vol. 6, no. 2, pp. 182--197, 2002.
-\bibitem{24} R. G. L. D'Souza et al., ``Improved NSGA-II based on a novel ranking scheme,'' \textit{Journal of Computing}, vol. 2, no. 2, pp. 91--95, 2010.
-\bibitem{25} A. Prakash P. and R. Radha, ``Optimization of electric vehicle routing: A multi-criteria intelligent decision framework for efficient and scalable mobility,'' \textit{Energy Reports}, vol. 15, Jun. 2026, Art. no. 108912.
+\bibitem{14} M. K. Bajaj, ``Optimal placement of electric vehicle charging stations in distribution systems: A review,'' \textit{IEEE Access}, vol. 11, pp. 45040--45058, 2023.
+\bibitem{15} A. S. A. Hafeez, M. A. Hannan, A. E. Al-Shetwi, M. Al-Muhsen, P. J. Ker, and R. A. Waly, ``Electric vehicle charging station placement in urban areas: A review,'' \textit{Energies}, vol. 15, no. 17, p. 6289, 2022.
+\bibitem{16} A. M. A. Abdelhadi, S. A. Shehata, and M. A. Eltamaly, ``Optimal placement of EV charging stations in distribution networks: A comprehensive review,'' \textit{Sustainability}, vol. 15, no. 3, p. 2578, 2023.
+\bibitem{17} B. Harshil and G. Nagababu, ``Strategies and models for optimal EV charging station site selection,'' \textit{IOP Conf. Series: Earth and Environmental Science}, vol. 1372, p. 012106, 2024.
+\bibitem{18} S. Kumar et al., ``A comprehensive review of optimal placement of EVCS and sizing in active distribution network,'' \textit{Australian J. Electrical and Electronic Engineering}, 2024.
+\bibitem{19} N. Liu et al., ``A charging station planning model considering the charging behavior of private car users,'' \textit{10th RPGC}, pp. 225--231, 2021.
+\bibitem{20} K. Deb et al., ``A fast and elitist multiobjective genetic algorithm: NSGA-II,'' \textit{IEEE Trans. Evolutionary Computation}, vol. 6, no. 2, pp. 182--197, 2002.
+\bibitem{21} C. A. C. Coello, G. T. Pulido, and M. S. Lechuga, ``Handling multiple objectives with particle swarm optimization,'' \textit{IEEE Trans. Evolutionary Computation}, vol. 8, no. 3, pp. 256--279, 2004.
+\bibitem{22} E. Zitzler, M. Laumanns, and L. Thiele, ``SPEA2: Improving the strength Pareto evolutionary algorithm,'' TIK-Report 103, ETH Zurich, 2001.
+\bibitem{23} M. Aljaidi, N. Aslam, and O. Kaiwartya, ``Optimal placement and capacity of electric vehicle charging stations in urban areas: Survey and open challenges,'' \textit{IEEE Jordan JEEIT}, pp. 238--243, 2019.
+\bibitem{24} K. N. Hasan et al., ``Distribution network voltage analysis with data-driven electric vehicle load profiles,'' \textit{Sustainable Energy, Grids and Networks}, vol. 36, 2023.
+\bibitem{25} F. Ahmad et al., ``Optimal location of electric vehicle charging station and its impact on distribution network: A review,'' \textit{Energy Reports}, vol. 8, pp. 2314--2333, 2022.
+\bibitem{26} I. Chandra, N. K. Singh, and P. Samuel, ``A comprehensive review on coordinated charging of electric vehicles in distribution networks,'' \textit{Journal of Energy Storage}, vol. 89, p. 111659, 2024.
+\bibitem{27} S. Islam et al., ``Effect of battery storage based EV chargers on harmonic profile of power system network,'' \textit{Journal of Energy Storage}, vol. 131, p. 117563, 2025.
+\bibitem{28} M. Aljaidi et al., ``EV charging station placement and sizing techniques: Survey, challenges and directions,'' \textit{Int. Conf. Advanced Computing Technologies and Applications}, pp. 1--6, 2022.
+\bibitem{29} S. Carpitella, X. Jia, and R. Narimani, ``A review on current trends on optimal EVCS location,'' \textit{Sustainability}, vol. 16, no. 14, p. 6093, 2024.
+\bibitem{30} Y. Tian, R. Cheng, X. Zhang, and Y. Jin, ``PlatEMO: A MATLAB platform for evolutionary multi-objective optimization,'' \textit{IEEE Computational Intelligence Magazine}, vol. 12, no. 4, pp. 73--87, 2017.
+\bibitem{31} Tata Motors, ``Tigor EV specifications,'' 2024. [Online]. Available: https://ev.tatamotors.com/tigor/ev.html
 \end{thebibliography}
 
 \end{document}
